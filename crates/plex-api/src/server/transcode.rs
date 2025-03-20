@@ -158,6 +158,23 @@ impl Display for ProfileSetting {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub enum ContainerSetting {
+    OptimizedForStreaming,
+}
+
+impl Display for ContainerSetting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ContainerSetting::OptimizedForStreaming => "part.optimizedForStreaming",
+            }
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum VideoSetting {
     /// Video width.
     Width,
@@ -218,7 +235,8 @@ impl Display for AudioSetting {
 pub enum Constraint {
     Max(String),
     Min(String),
-    Match(Vec<String>),
+    Match(String),
+    MatchList(Vec<String>),
     NotMatch(String),
 }
 
@@ -233,6 +251,7 @@ pub struct Limitation<C, S> {
     pub codec: Option<C>,
     pub setting: S,
     pub constraint: Constraint,
+    pub is_required: bool,
 }
 
 impl<C: ToString, S: ToString> Limitation<C, S> {
@@ -244,15 +263,20 @@ impl<C: ToString, S: ToString> Limitation<C, S> {
         };
         let name = self.setting.to_string();
 
-        let setting = ProfileSetting::new("add-limitation")
+        let mut setting = ProfileSetting::new("add-limitation")
             .param("scope", scope)
             .param("scopeName", scope_name)
             .param("name", name);
 
+        if self.is_required {
+            setting = setting.param("isRequired", "true");
+        }
+
         match &self.constraint {
             Constraint::Max(v) => setting.param("type", "upperBound").param("value", v),
             Constraint::Min(v) => setting.param("type", "lowerBound").param("value", v),
-            Constraint::Match(l) => setting.param("type", "match").param(
+            Constraint::Match(v) => setting.param("type", "match").param("value", v),
+            Constraint::MatchList(l) => setting.param("type", "match").param(
                 "list",
                 l.iter()
                     .map(|s| s.to_string())
@@ -270,6 +294,7 @@ impl<C, S> From<(S, Constraint)> for Limitation<C, S> {
             codec: None,
             setting,
             constraint,
+            is_required: false,
         }
     }
 }
@@ -280,6 +305,7 @@ impl<C, S> From<(C, S, Constraint)> for Limitation<C, S> {
             codec: Some(codec),
             setting,
             constraint,
+            is_required: false,
         }
     }
 }
@@ -290,6 +316,7 @@ impl<C, S> From<(Option<C>, S, Constraint)> for Limitation<C, S> {
             codec,
             setting,
             constraint,
+            is_required: false,
         }
     }
 }
@@ -331,6 +358,8 @@ pub struct VideoTranscodeOptions {
     pub burn_subtitles: bool,
     /// Supported media container formats. Ignored for streaming transcodes.
     pub containers: Vec<ContainerFormat>,
+    /// Limitations to constrain containers.
+    pub container_limitations: Vec<Limitation<ContainerFormat, ContainerSetting>>,
     /// Supported video codecs.
     pub video_codecs: Vec<VideoCodec>,
     /// Limitations to constraint video transcoding options.
@@ -350,6 +379,7 @@ impl Default for VideoTranscodeOptions {
             audio_boost: None,
             burn_subtitles: true,
             containers: vec![ContainerFormat::Mp4, ContainerFormat::Mkv],
+            container_limitations: Default::default(),
             video_codecs: vec![VideoCodec::H264],
             video_limitations: Default::default(),
             audio_codecs: vec![AudioCodec::Aac, AudioCodec::Mp3],
@@ -445,6 +475,11 @@ impl TranscodeOptions for VideoTranscodeOptions {
                 .to_string()
         }));
 
+        profile.extend(
+            self.container_limitations
+                .iter()
+                .map(|l| l.build("videoContainer").to_string()),
+        );
         profile.extend(
             self.video_limitations
                 .iter()

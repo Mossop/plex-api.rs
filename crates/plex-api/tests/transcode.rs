@@ -483,7 +483,7 @@ mod offline {
                         (
                             VideoCodec::Vp9,
                             VideoSetting::Profile,
-                            Constraint::Match(vec!["main".to_string(), "baseline".to_string()]),
+                            Constraint::MatchList(vec!["main".to_string(), "baseline".to_string()]),
                         )
                             .into(),
                     ],
