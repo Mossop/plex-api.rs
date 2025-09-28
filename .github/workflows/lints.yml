@@ -55,9 +55,6 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
-        with:
-          ref: ${{ github.head_ref || github.ref }}
-          fetch-depth: 0
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
